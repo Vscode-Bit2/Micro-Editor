@@ -417,5 +417,127 @@ Object.assign(LightningEngine.prototype, {
         iframeDoc.close();
     }
 });
+// ==========================================
+// MICRO-EDITOR: PART 4 - FILE EXPLORER & EXPORT
+// Paste this directly below Part 3
+// ==========================================
+
+Object.assign(LightningEngine.prototype, {
+
+    // --- FILE SYSTEM UI LOGIC ---
+
+    createNewFile() {
+        const fileName = prompt("Enter new file name (e.g., component.html, main.css, data.js):");
+        
+        if (!fileName || fileName.trim() === '') return;
+        
+        if (this.vfs[fileName]) {
+            alert("A file with that name already exists!");
+            return;
+        }
+
+        // Auto-detect language based on extension
+        let lang = 'html';
+        if (fileName.endsWith('.css')) lang = 'css';
+        if (fileName.endsWith('.js')) lang = 'javascript';
+
+        // Add to Virtual File System
+        this.vfs[fileName] = {
+            language: lang,
+            content: ''
+        };
+
+        // Instantly switch to the new file
+        this.loadFile(fileName);
+    },
+
+    deleteCurrentFile() {
+        if (Object.keys(this.vfs).length <= 1) {
+            alert("You cannot delete the last remaining file in the project.");
+            return;
+        }
+
+        const confirmDelete = confirm(`Are you sure you want to delete ${this.activeFileName}?`);
+        if (confirmDelete) {
+            delete this.vfs[this.activeFileName];
+            
+            // Fallback to the first available file in memory
+            const nextFile = Object.keys(this.vfs)[0];
+            this.loadFile(nextFile);
+        }
+    },
+
+    exportProject() {
+        // Zero-Dependency Export: Stitches the VFS into a single downloadable file
+        const htmlContent = this.vfs['index.html'] ? this.vfs['index.html'].content : '<h1>No index.html found</h1>';
+        const cssContent = this.vfs['style.css'] ? this.vfs['style.css'].content : '';
+        
+        // Combine all JavaScript files in the explorer
+        let jsContent = '';
+        Object.keys(this.vfs).forEach(file => {
+            if (file.endsWith('.js')) {
+                jsContent += `\n/* --- ${file} --- */\n` + this.vfs[file].content + '\n';
+            }
+        });
+
+        let bundle = htmlContent;
+        
+        if (cssContent && bundle.includes('</head>')) {
+            bundle = bundle.replace('</head>', `<style>\n${cssContent}\n</style>\n</head>`);
+        } else if (cssContent) {
+            bundle = `<style>\n${cssContent}\n</style>\n` + bundle;
+        }
+
+        if (jsContent && bundle.includes('</body>')) {
+            bundle = bundle.replace('</body>', `<script>\n${jsContent}\n</script>\n</body>`);
+        } else if (jsContent) {
+            bundle = bundle + `\n<script>\n${jsContent}\n</script>`;
+        }
+
+        // Trigger native browser download
+        const blob = new Blob([bundle], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        
+        const downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.download = 'lightning-project-export.html';
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+    },
+
+    // --- UI INJECTION ---
+    
+    injectExplorerButtons() {
+        // Targets the sidebar header we built in Part 1 and adds the control panel
+        const header = document.querySelector('.sidebar-header');
+        if (header && !document.getElementById('add-file-btn')) {
+            header.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span>EXPLORER</span>
+                    <div style="font-size: 16px;">
+                        <span id="add-file-btn" style="cursor:pointer; margin-right:12px; color:#c586c0;" title="New File">+</span>
+                        <span id="delete-file-btn" style="cursor:pointer; margin-right:12px; color:#f44336;" title="Delete File">×</span>
+                        <span id="export-btn" style="cursor:pointer; color:#569cd6;" title="Export Project">↓</span>
+                    </div>
+                </div>
+            `;
+
+            // Bind the newly injected buttons
+            document.getElementById('add-file-btn').onclick = () => this.createNewFile();
+            document.getElementById('delete-file-btn').onclick = () => this.deleteCurrentFile();
+            document.getElementById('export-btn').onclick = () => this.exportProject();
+        }
+    }
+});
+
+// Auto-patch the boot sequence so the buttons inject when the IDE loads
+const originalBoot = LightningEngine.prototype.buildBaseUI;
+LightningEngine.prototype.buildBaseUI = function() {
+    originalBoot.call(this);
+    // Push injection to the end of the call stack so the DOM is ready
+    setTimeout(() => this.injectExplorerButtons(), 10);
+};
 
 
