@@ -354,4 +354,68 @@ Object.assign(LightningEngine.prototype, {
         this.highlighter.innerHTML = formatted;
     }
 });
+// ==========================================
+// MICRO-EDITOR: PART 3 - LIVE VIRTUAL COMPILER
+// Paste this directly below Part 2
+// ==========================================
+
+Object.assign(LightningEngine.prototype, {
+
+    // --- VIRTUAL COMPILER ENGINE ---
+
+    compilePreview() {
+        if (!this.previewView) return;
+
+        // 1. Extract raw code from the Virtual File System (VFS)
+        // If the user deleted a file, we provide a safe fallback so it doesn't crash.
+        const htmlContent = this.vfs['index.html'] ? this.vfs['index.html'].content : '<h1>Error: Missing index.html</h1>';
+        const cssContent = this.vfs['style.css'] ? this.vfs['style.css'].content : '';
+        const jsContent = this.vfs['script.js'] ? this.vfs['script.js'].content : '';
+
+        // 2. Build the Injection Bundles
+        // We wrap the raw CSS and JS text inside their respective HTML tags.
+        const styleBundle = `<style>\n${cssContent}\n</style>`;
+        
+        // We wrap the user's JS in a try-catch block. 
+        // This prevents the whole iframe from silently dying if the user writes a typo in their JS.
+        const scriptBundle = `
+        <script>
+            try {
+                ${jsContent}
+            } catch (err) {
+                console.error("Micro-IDE Execution Error: ", err.message);
+                document.body.innerHTML += '<div style="color:red; font-family:sans-serif; padding:10px; border:1px solid red; margin-top:10px;"><b>JS Error:</b> ' + err.message + '</div>';
+            }
+        <\/script>`;
+
+        // 3. Smart Stitching (The Compiler Logic)
+        // We need to inject the CSS into the <head> and the JS right before the </body> tag.
+        let finalOutput = htmlContent;
+
+        // Inject CSS
+        if (finalOutput.includes('</head>')) {
+            finalOutput = finalOutput.replace('</head>', `${styleBundle}\n</head>`);
+        } else {
+            // Fallback: If the user deleted the <head> tag, just jam it at the top.
+            finalOutput = styleBundle + finalOutput;
+        }
+
+        // Inject JS
+        if (finalOutput.includes('</body>')) {
+            finalOutput = finalOutput.replace('</body>', `${scriptBundle}\n</body>`);
+        } else {
+            // Fallback: If the user deleted the </body> tag, stick it at the bottom.
+            finalOutput = finalOutput + scriptBundle;
+        }
+
+        // 4. Secure iframe Execution
+        // We grab the iframe's internal document and force it to completely rewrite itself.
+        const iframeDoc = this.previewView.contentWindow.document;
+        
+        iframeDoc.open();
+        iframeDoc.write(finalOutput);
+        iframeDoc.close();
+    }
+});
+
 
