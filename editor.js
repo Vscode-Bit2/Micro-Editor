@@ -126,16 +126,24 @@ document.querySelector('.glass-panel').addEventListener('click', () => {
         this.tabPreviewView.onclick = () => this.switchMode('preview');
     }
 
-    renderFileTree() {
+        renderFileTree() {
         this.fileTree.innerHTML = '';
         Object.keys(this.vfs).forEach(fileName => {
             const el = document.createElement('div');
-            el.className = \`file-item \${fileName === this.activeFileName ? 'active' : ''}\`;
+            
+            // Detect the extension to assign the correct real SVG icon
+            let extClass = '';
+            if (fileName.endsWith('.html')) extClass = 'is-html';
+            else if (fileName.endsWith('.css')) extClass = 'is-css';
+            else if (fileName.endsWith('.js')) extClass = 'is-js';
+            
+            el.className = `file-item ${extClass} ${fileName === this.activeFileName ? 'active' : ''}`;
             el.innerText = fileName;
             el.onclick = () => this.loadFile(fileName);
             this.fileTree.appendChild(el);
         });
-    }
+        }
+    
 
     loadFile(fileName) {
         // Save current state just in case
