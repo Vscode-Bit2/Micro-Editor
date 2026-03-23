@@ -1,67 +1,43 @@
-.micro-editor-container {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    min-height: 400px;
-    background: #000000;
-    color: #d4d4d4;
-    font-family: Consolas, "Courier New", monospace;
-    font-size: 14px;
-    line-height: 1.5;
-    display: flex;
-    overflow: hidden;
+/* Container and Full Screen Setup */
+.micro-ide-wrapper {
+    display: flex; flex-direction: column; width: 100%; height: 100%;
+    background: #1e1e1e; color: #d4d4d4;
+    font-family: 'Consolas', 'Courier New', monospace;
 }
 
-.micro-editor-lines {
-    padding: 10px 10px;
-    text-align: right;
-    color: #858585;
-    background: #000000;
-    border-right: 1px solid #333;
-    user-select: none;
-    min-width: 40px;
-    overflow: hidden;
+/* Tab Management */
+.tab-bar {
+    display: flex; background: #252526; height: 35px; overflow-x: auto;
+    font-family: sans-serif;
 }
-
-.micro-editor-code-area {
-    position: relative;
-    flex-grow: 1;
-    overflow: auto;
+.ide-tab {
+    display: flex; align-items: center; padding: 0 20px; color: #969696;
+    background: #2d2d2d; cursor: pointer; font-size: 13px;
+    border-right: 1px solid #1e1e1e; user-select: none;
 }
+.ide-tab.active { color: #ffffff; background: #1e1e1e; border-top: 1px solid #007acc; }
 
-.micro-editor-input, .micro-editor-highlight {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    padding: 10px;
-    margin: 0;
-    border: none;
-    box-sizing: border-box;
-    white-space: pre;
-    font-family: inherit;
-    font-size: inherit;
-    line-height: inherit;
-    tab-size: 4;
+/* Workspaces */
+.workspace { flex-grow: 1; display: flex; position: relative; }
+#preview-area { display: none; width: 100%; height: 100%; border: none; background: #ffffff; }
+#code-area { display: flex; width: 100%; height: 100%; position: relative; }
+
+/* Editor Core */
+.lines {
+    padding: 10px; text-align: right; color: #858585; background: #1e1e1e;
+    min-width: 45px; user-select: none; border-right: 1px solid #333; overflow: hidden;
+    font-size: 14px; line-height: 1.5;
 }
-
-.micro-editor-input {
-    background: transparent;
-    color: transparent;
-    caret-color: #fff;
-    resize: none;
-    outline: none;
-    z-index: 2;
+.input, .highlight {
+    position: absolute; top: 0; left: 65px; width: calc(100% - 65px); height: 100%;
+    padding: 10px; margin: 0; border: none; box-sizing: border-box; white-space: pre;
+    font-family: inherit; font-size: 14px; line-height: 1.5; tab-size: 4;
 }
+.input { background: transparent; color: transparent; caret-color: #d4d4d4; resize: none; outline: none; z-index: 2; }
+.highlight { color: #d4d4d4; z-index: 1; pointer-events: none; overflow: hidden; }
 
-.micro-editor-highlight {
-    color: #d4d4d4;
-    z-index: 1;
-    pointer-events: none;
-}
-
-/* Basic Syntax Colors */
-.syntax-keyword { color: #569cd6; font-weight: bold; }
-.syntax-string { color: #ce9178; }
-
+/* Syntax Highlighting */
+.syn-bracket { color: #808080; }
+.syn-tag { color: #569cd6; }
+.syn-attr { color: #9cdcfe; }
+.syn-string { color: #ce9178; }
