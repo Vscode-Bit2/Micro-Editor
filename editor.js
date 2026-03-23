@@ -175,3 +175,183 @@ document.querySelector('.glass-panel').addEventListener('click', () => {
         }
     }
 }
+// ==========================================
+// MICRO-EDITOR: PART 2 - SYNTAX & EMMET ENGINE
+// Paste this directly below Part 1
+// ==========================================
+
+Object.assign(LightningEngine.prototype, {
+
+    // --- KEYBOARD & TYPING MECHANICS ---
+
+    bindCoreEvents() {
+        // Overriding the placeholder from Part 1 with the real events
+        this.renderFileTree();
+        
+        this.input.addEventListener('input', () => {
+            this.vfs[this.activeFileName].content = this.input.value;
+            this.updateSyntax(); 
+        });
+
+        this.input.addEventListener('scroll', () => this.syncScroll());
+        this.input.addEventListener('keydown', (e) => this.handleKeystrokes(e));
+
+        this.tabCodeView.onclick = () => this.switchMode('code');
+        this.tabPreviewView.onclick = () => this.switchMode('preview');
+    },
+
+    syncScroll() {
+        // Pixel-perfect sync between invisible textarea and syntax layer
+        this.highlighter.scrollTop = this.input.scrollTop;
+        this.highlighter.scrollLeft = this.input.scrollLeft;
+        this.lines.scrollTop = this.input.scrollTop;
+    },
+
+    handleKeystrokes(e) {
+        const val = this.input.value;
+        let start = this.input.selectionStart;
+        
+        // 1. Emmet Expansion & Tab Indent
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+            const currentLineToCursor = val.substring(lineStart, start);
+            
+            // Check if it's an Emmet abbreviation (e.g., div.container>p)
+            const abbrMatch = currentLineToCursor.match(/([a-zA-Z0-9\.\#\>\*]+)$/);
+            const language = this.vfs[this.activeFileName].language;
+            
+            if (language === 'html' && abbrMatch && this.isValidAbbr(abbrMatch[1])) {
+                const abbr = abbrMatch[1];
+                const expanded = this.expandAbbreviation(abbr);
+                this.insertText(expanded, start - abbr.length, start);
+                // Smart cursor placement inside the first tag
+                this.input.selectionStart = this.input.selectionEnd = (start - abbr.length) + expanded.indexOf('><') + 1;
+            } else {
+                this.insertText("    "); // Fallback to 4-space indent
+            }
+        }
+
+        // 2. Smart Brackets & Quotes
+        const pairs = { '{': '}', '[': ']', '(': ')', '"': '"', "'": "'", '`': '`' };
+        if (pairs[e.key]) {
+            e.preventDefault();
+            this.insertText(e.key + pairs[e.key]);
+            this.input.selectionStart = this.input.selectionEnd = start + 1;
+        }
+
+        // 3. Smart Enter (Auto-Indent & Tag Splitting)
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+            const currentLine = val.substring(lineStart, start);
+            const indentMatch = currentLine.match(/^\s*/);
+            let indent = indentMatch ? indentMatch[0] : "";
+
+            // If pressing enter between <div> and </div> or { and }
+            if ((val[start - 1] === '>' && val[start] === '<' && val[start+1] === '/') || 
+                (val[start - 1] === '{' && val[start] === '}')) {
+                this.insertText('\n' + indent + '    \n' + indent);
+                this.input.selectionStart = this.input.selectionEnd = start + indent.length + 5;
+            } else {
+                this.insertText('\n' + indent); // Carry over previous indent
+            }
+        }
+    },
+
+    insertText(text, replaceStart = this.input.selectionStart, replaceEnd = this.input.selectionEnd) {
+        this.input.value = this.input.value.substring(0, replaceStart) + text + this.input.value.substring(replaceEnd);
+        this.input.selectionStart = this.input.selectionEnd = replaceStart + text.length;
+        this.vfs[this.activeFileName].content = this.input.value;
+        this.updateSyntax();
+    },
+
+    // --- EMMET PARSER ENGINE ---
+
+    isValidAbbr(str) {
+        // Prevent expanding JS variables like "const" or "let"
+        return /^[a-z]+[a-z0-9\.\#\>\*]*$/.test(str) && !['const', 'let', 'var', 'function', 'return'].includes(str);
+    },
+
+    expandAbbreviation(abbr) {
+        const parts = abbr.split('>');
+        let result = "";
+        
+        parts.forEach((part, index) => {
+            let count = 1;
+            let tagStr = part;
+            
+            if (part.includes('*')) {
+                const split = part.split('*');
+                tagStr = split[0];
+                count = parseInt(split[1]) || 1;
+            }
+
+            let tag = tagStr.match(/^[a-zA-Z0-9]+/)?.[0] || 'div';
+            let classes = tagStr.match(/\.([a-zA-Z0-9\-]+)/g)?.map(c => c.substring(1)).join(' ') || '';
+            let id = tagStr.match(/\#([a-zA-Z0-9\-]+)/)?.[1] || '';
+
+            let attrs = "";
+            if (classes) attrs += ` class="${classes}"`;
+            if (id) attrs += ` id="${id}"`;
+
+            let block = `<${tag}${attrs}></${tag}>`;
+            
+            if (index === 0) {
+                result = block.repeat(count);
+            } else {
+                // Nested injection
+                const prevTag = parts[index-1].split(/[\.\#\*]/)[0] || 'div';
+                const regex = new RegExp(`</${prevTag}>`, 'g');
+                result = result.replace(regex, `\n    ${block.repeat(count)}\n</${prevTag}>`);
+            }
+        });
+        return result;
+    },
+
+    // --- MULTI-LANGUAGE SYNTAX HIGHLIGHTER ---
+
+    updateSyntax() {
+        if (!this.input || !this.highlighter || !this.lines) return;
+        
+        const text = this.input.value;
+        const language = this.vfs[this.activeFileName].language;
+        
+        // 1. Update Lines
+        const lineCount = text.split('\n').length;
+        this.lines.innerHTML = Array.from({length: lineCount}, (_, i) => i + 1).join('<br>');
+
+        // 2. Escape HTML to prevent accidental DOM injection
+        let formatted = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        // 3. Apply Language-Specific Regex Rules
+        if (language === 'html') {
+            formatted = formatted
+                .replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="tk-comment">$1</span>')
+                .replace(/(&lt;\/?)([a-zA-Z0-9\-]+)/g, '<span class="tk-bracket">$1</span><span class="tk-tag">$2</span>')
+                .replace(/([a-zA-Z\-]+)=/g, '<span class="tk-attr">$1</span>=')
+                .replace(/(["'])(.*?)\1/g, '<span class="tk-str">$&</span>')
+                .replace(/&gt;/g, '<span class="tk-bracket">&gt;</span>');
+        } 
+        else if (language === 'css') {
+            formatted = formatted
+                .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="tk-comment">$1</span>')
+                .replace(/([\.#]?[a-zA-Z0-9\-]+)(?=\s*\{)/g, '<span class="tk-tag">$1</span>') // Selectors
+                .replace(/([a-zA-Z\-]+)(?=\s*:)/g, '<span class="tk-attr">$1</span>') // Properties
+                .replace(/:\s*([^;]+);/g, ': <span class="tk-str">$1</span>;') // Values
+                .replace(/px|em|rem|vh|vw|%/g, '<span class="tk-kw">$&</span>'); // Units
+        }
+        else if (language === 'javascript') {
+            formatted = formatted
+                .replace(/(\/\/.*?$|\/\*[\s\S]*?\*\/)/gm, '<span class="tk-comment">$1</span>')
+                .replace(/(["'`])(.*?)\1/g, '<span class="tk-str">$&</span>')
+                .replace(/\b(function|const|let|var|if|else|return|class|new|import|export|from|await|async|=>)\b/g, '<span class="tk-kw">$1</span>')
+                .replace(/\b(document|window|console|Math|Object|Array|String|this)\b/g, '<span class="tk-tag">$1</span>')
+                .replace(/([a-zA-Z0-9_]+)(?=\s*\()/g, '<span class="tk-attr">$1</span>'); // Functions
+        }
+
+        // 4. Inject into the invisible display layer
+        this.highlighter.innerHTML = formatted;
+    }
+});
+
